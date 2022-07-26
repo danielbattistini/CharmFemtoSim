@@ -1,4 +1,4 @@
-#define __ALI__ //__O2__ or __ALI__
+#define __O2__ //__O2__ or __ALI__
 
 #if !defined(__CINT__) || defined(__MAKECINT__)
 
@@ -60,7 +60,8 @@ namespace
 //__________________________________________________________________________________________________
 void SimulateCharmLightCorrelation(int nEvents=1000000, int tune=kCRMode2, int process=kSoftQCD, float energy=13000, int seed=42, std::string outFileNameRoot="AnalysisResults.root");
 float ComputeKstar(ROOT::Math::PxPyPzMVector part1, ROOT::Math::PxPyPzMVector part2);
-
+template <typename T>
+bool IsFromBeauty(int &particleIndex, T &pythia);
 //__________________________________________________________________________________________________
 void SimulateCharmLightCorrelation(int nEvents, int tune, int process, float energy, int seed, std::string outFileNameRoot)
 {
@@ -297,20 +298,7 @@ TClonesArray* particles = new TClonesArray("TParticle", 1000);
             int absPdg = std::abs(pdg);
             if(std::find(charmPDG.begin(), charmPDG.end(), absPdg) != charmPDG.end())
             {
-                bool isFromB = false;
-                std::vector<int> mothers = pythia.event[iPart].motherList();
-                for(auto &mom: mothers)
-                {
-                    int absPdgMom = std::abs(pythia.event[mom].id());
-                    if(absPdgMom == 5 || absPdgMom/100 == 5 || absPdgMom/1000 == 5 ||
-                       (absPdgMom-10000)/100 == 5 || (absPdgMom-20000)/100 == 5 || (absPdgMom-30000)/100 == 5 ||
-                       (absPdgMom-100000)/100 == 5 || (absPdgMom-200000)/100 == 5 || (absPdgMom-300000)/100 == 5)
-                    {  // remove beauty feed-down
-                        isFromB = true;
-                        break;
-                    }
-                }
-                if(!isFromB)
+                if (!IsFromBeauty(iPart, pythia))
                 {
                     ROOT::Math::PxPyPzMVector part(pythia.event[iPart].px(), pythia.event[iPart].py(), pythia.event[iPart].pz(), TDatabasePDG::Instance()->GetParticle(absPdg)->Mass());
                     partCharm.push_back(part);
@@ -349,22 +337,7 @@ TClonesArray* particles = new TClonesArray("TParticle", 1000);
             int absPdg = std::abs(pdg);
             if(std::find(charmPDG.begin(), charmPDG.end(), absPdg) != charmPDG.end())
             {
-                bool isFromB = false;
-                int motherIdx = particle->GetFirstMother();
-                while(motherIdx>1) // 0 and 1 protons
-                {
-                    int absPdgMom = std::abs(particle->GetPdgCode());
-                    if(absPdgMom == 5 || absPdgMom/100 == 5 || absPdgMom/1000 == 5 ||
-                       (absPdgMom-10000)/100 == 5 || (absPdgMom-20000)/100 == 5 || (absPdgMom-30000)/100 == 5 ||
-                       (absPdgMom-100000)/100 == 5 || (absPdgMom-200000)/100 == 5 || (absPdgMom-300000)/100 == 5)
-                    {  // remove beauty feed-down
-                        isFromB = true;
-                        break;
-                    }
-                    TParticle* mom = dynamic_cast<TParticle*>(particles->At(motherIdx));
-                    motherIdx = mom->GetFirstMother();
-                }
-                if(!isFromB)
+                if (!IsFromBeauty(iPart, pythia))
                 {
                     ROOT::Math::PxPyPzMVector part(particle->Px(), particle->Py(), particle->Pz(), TDatabasePDG::Instance()->GetParticle(absPdg)->Mass());
                     partCharm.push_back(part);
@@ -470,4 +443,38 @@ float ComputeKstar(ROOT::Math::PxPyPzMVector part1, ROOT::Math::PxPyPzMVector pa
     ROOT::Math::PxPyPzMVector trackRelK = part1CM - part2CM;
     float kStar = 0.5 * trackRelK.P();
     return kStar;
+}
+
+//__________________________________________________________________________________________________
+template <typename T>
+bool IsFromBeauty(int &particleIndex, T &pythia) {
+    std::vector<std::vector<int>> indecesToTest{};
+    indecesToTest.push_back({particleIndex});
+    auto depth = 0;
+
+    while (indecesToTest[depth].size() > 0) {
+        std::vector<int> idsTmp{};
+        for (auto &id : indecesToTest[depth]) {
+            auto mothers = pythia.event[id].motherList();
+            for (auto &mom : mothers) {
+                idsTmp.push_back(mom);
+                int absPdgMom = std::abs(pythia.event[mom].id());
+                if (absPdgMom == 5 ||                   // b quark
+                    absPdgMom / 100 == 5 ||             // b mesons
+                    absPdgMom / 1000 == 5 ||            // b baryons
+                    (absPdgMom - 10000) / 100 == 5 ||   // bbbar resonances
+                    (absPdgMom - 20000) / 100 == 5 ||   // bbbar resonances
+                    (absPdgMom - 30000) / 100 == 5 ||   // bbbar resonances
+                    (absPdgMom - 100000) / 100 == 5 ||  // bbbar resonances
+                    (absPdgMom - 200000) / 100 == 5 ||  // bbbar resonances
+                    (absPdgMom - 300000) / 100 == 5     // bbbar resonances
+                ) {
+                    return true;
+                }
+            }
+        }
+        indecesToTest.push_back(idsTmp);
+        depth++;
+    }
+    return false;
 }
