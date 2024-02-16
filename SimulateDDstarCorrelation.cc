@@ -205,8 +205,8 @@ void SimulateDDstarCorrelation(int nEvents, int tune, int process, float energy,
             hPairVsY[pdgDstar][pdgDmeson]["part"] = new THnF(Form("hPairVsY_%d_%d", pdgDstar, pdgDmeson), "pairs;#it{y}^{D};#it{y}^{D*};#it{k}* (GeV/#it{c});isInAccepance", 4, nBins, mins, maxs);
             hPairVsY[pdgDstar][pdgDmeson]["antipart"] = new THnF(Form("hPairVsY_%d_%d", pdgDstar, -pdgDmeson), "pairs;#it{y}^{D};#it{y}^{D*};#it{k}* (GeV/#it{c});isInAccepance", 4, nBins, mins, maxs);
 
-            hResoSE[pdgDstar][pdgDmeson]["part"] = new TH2F(Form("hResoSE_%d_%d", pdgDstar, pdgDmeson), "#it{k}* resolution;#it{k}*_{true} (GeV/#it{c});#it{k}*_{reco} (GeV/#it{c})", 1000, 0, 2, 1000, 0, 2);
-            hResoSE[pdgDstar][pdgDmeson]["antipart"] = new TH2F(Form("hResoSE_%d_%d", pdgDstar, -pdgDmeson), "#it{k}* resolution;#it{k}*_{true} (GeV/#it{c});#it{k}*_{reco} (GeV/#it{c})", 1000, 0, 2, 1000, 0, 2);
+            hResoSE[pdgDstar][pdgDmeson]["part"] = new TH2F(Form("hResoSE_%d_%d", pdgDstar, pdgDmeson), "#it{k}* resolution;#it{k}*_{true} (GeV/#it{c});#it{k}*_{reco} (GeV/#it{c})", 250, 0, 0.5, 250, 0, 0.5);
+            hResoSE[pdgDstar][pdgDmeson]["antipart"] = new TH2F(Form("hResoSE_%d_%d", pdgDstar, -pdgDmeson), "#it{k}* resolution;#it{k}*_{true} (GeV/#it{c});#it{k}*_{reco} (GeV/#it{c})", 250, 0, 0.5, 250, 0, 0.5);
         }
     }
 
