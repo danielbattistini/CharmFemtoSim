@@ -8,10 +8,46 @@ import argparse
 import pandas as pd
 import numpy as np
 import yaml
-from ROOT import gROOT
-gROOT.SetBatch(True)
 from ROOT import TFile, TGaxis, TCanvas, TF1, TGraph, TH1F, TSpline3, TLegend, TLatex, TLine # pylint: disable=import-error,no-name-in-module
 from ROOT import kAzure, kGreen, kOrange, kRed, kBlack, kGray, kFullCircle, kOpenCircle, kFullDiamond, gStyle, kRainBow, gROOT # pylint: disable=import-error,no-name-in-module
+
+
+def WeightedAverage(graph, weights):
+    '''
+    Compute the weighted average of a graph with an histogram (TH1)
+    '''
+    smeared = 0
+    counts = weights.Integral(1, weights.GetNbinsX())
+    for iBin in range(weights.GetNbinsX()):
+        freq = weights.GetBinContent(iBin + 1) / counts
+        y = graph.Eval(weights.GetBinCenter(iBin+1))
+        smeared += freq * y
+    return smeared
+
+
+def SmearGraph(graph, matrix):
+    '''
+    Smear a graph with a smearing matrix that has:
+     x axis: true variable
+     y axis: reconstructed variable.
+    '''
+    gSmeared = TGraph(1)
+
+    iPoint = 0
+    for iBin in range(matrix.GetNbinsX()):
+        hProj = matrix.ProjectionY(f'hProj_{iBin+1}', iBin+1, iBin+1)
+        counts = hProj.Integral(1, hProj.GetNbinsX())
+
+        if counts < 1:
+            continue
+
+        x = matrix.GetXaxis().GetBinCenter(iBin+1)
+        ySmear = WeightedAverage(graph, hProj)
+        gSmeared.SetPoint(iPoint, x, ySmear)
+        iPoint += 1
+
+    return gSmeared
+
 
 gStyle.SetPadBottomMargin(0.12)
 gStyle.SetPadTopMargin(0.05)
@@ -81,7 +117,7 @@ nEvents = cfg['eventsperfile'] * len(inFileNames)
 
 print(f'\nAnalysing simulation outputs with {len(inFileNames)} files for a total of {nEvents} events\n')
 
-hSEDistrVsPt, hMEDistrVsPt, hSEDistrVsY = None, None, None
+hSEDistrVsPt, hMEDistrVsPt, hSEDistrVsY, hResoSE = None, None, None, None
 for inFileName in inFileNames:
     inFile = TFile.Open(os.path.join(inDirName, inFileName))
     hTmpSE = inFile.Get(f'hPairSE_{Dstarspecie}_{Dspecie}')
@@ -100,7 +136,20 @@ for inFileName in inFileNames:
         hMEDistrVsPt = hTmpME
         if doAccStudy:
             hSEDistrVsY = hTmpVsY
+    if cfg['predictions'].get('smear') and cfg['predictions']['smear']['enable']:
+        hTmpResoSE = inFile.Get(f'hResoSE_{Dstarspecie}_{Dspecie}')
+        hTmpResoSE.RebinX(cfg['predictions']['smear']['rebin'])
+        hTmpResoSE.RebinY(cfg['predictions']['smear']['rebin'])
+        hTmpResoSE.SetDirectory(0)
+        if hResoSE:
+            hResoSE.Add(hTmpResoSE)
+        else:
+            hResoSE = hTmpResoSE
     inFile.Close()
+
+cSmearingMatrix = TCanvas('cSmearingMatrix', '', 600, 600)
+hResoSE.Draw('colz')
+cSmearingMatrix.SaveAs(cfg['output']['file'][:-4] + '_smearingMatrix.pdf')
 
 BRfactor = brD * brDstar
 lumiScaleFactorPP = 6.e14 / nEvents
@@ -304,15 +353,17 @@ gPred, sPred, hSEPred, hSEPredWithJets, hSEPredBkgD, hSEPredBkgDstar, \
     hSEPredBkgDDstar, hSEPredBkg, hCFPred = ({} for _ in range(9))
 for pred in predictions:
     gPred[pred] = TGraph(1)
-    gPred[pred].SetLineColor(predColors[pred])
-    gPred[pred].SetFillColor(predColors[pred])
-    gPred[pred].SetLineWidth(2)
     hSEPred[pred] = hSEDistr.Clone(f'hSEPred{pred}')
     hSEPred[pred].SetLineColor(predColors[pred])
     hSEPred[pred].SetMarkerColor(predColors[pred])
     for iP, (kStar, cf) in enumerate(
         zip(predictions[pred]['kstar'].to_numpy(), predictions[pred]['cf'].to_numpy())):
         gPred[pred].SetPoint(iP, kStar/1000, cf)
+    if hResoSE:
+        gPred[pred] = SmearGraph(gPred[pred], hResoSE)
+    gPred[pred].SetLineColor(predColors[pred])
+    gPred[pred].SetFillColor(predColors[pred])
+    gPred[pred].SetLineWidth(2)
     sPred[pred] = TSpline3(f'sPred{pred}', gPred[pred])
     for iBin in range(1, hSEDistr.GetNbinsX()+1):
         kStarCent = hSEDistr.GetXaxis().GetBinCenter(iBin)
@@ -411,7 +462,7 @@ hMEDistr.Draw('esame')
 cDistrPred.cd(3).DrawFrame(0., 0., args.xMax, args.yMax,
                            f';#it{{k}}* (GeV/#it{{c}});#it{{C}}_{{{Dtitle}{Dstartitle}}}')
 for pred in predictions:
-    gPred[pred].Draw('C')
+    gPred[pred].Draw('L')
     if pred in ['1fm']:
         hCFPred[pred].Draw('esame')
 legModels.Draw()
@@ -430,7 +481,7 @@ hFrame = cResult.DrawFrame(0., 0.01, args.xMax, args.yMax,
 hFrame.GetYaxis().SetDecimals()
 hFrame.GetXaxis().SetNdivisions(505)
 for pred in predictions:
-    gPred[pred].Draw('C')
+    gPred[pred].Draw('L')
     if pred in ['1fm', '5fm']:
         hCFPred[pred].Draw('esame')
 lat.DrawLatex(0.18, 0.88, 'ALICE 3 upgrade projection')

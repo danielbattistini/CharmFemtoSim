@@ -14,6 +14,9 @@ predictions:
     2fm: predictions/X/2fm.dat
     3fm: predictions/X/3fm.dat
     5fm: predictions/X/5fm.dat
+    smear:
+        enable: false
+        rebin: 1
 
 Dmesonperf:
     inputfile: Analysis_output_LHC21dn_TOFPID.root

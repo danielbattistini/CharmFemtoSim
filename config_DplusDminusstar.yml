@@ -19,6 +19,9 @@ Dmesonperf:
     inputfile: Analysis_output_LHC21dn_TOFPID.root
     ptmins: [1., 2., 3., 4., 6., 8.]
     ptmaxs: [2., 3., 4., 6., 8., 10.]
+    smear:
+        enable: false
+        rebin: 1
 
 output:
     file: ALICE3_DDstarbar_charged_pp_PbPb.eps
