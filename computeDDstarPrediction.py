@@ -11,7 +11,7 @@ import yaml
 from ROOT import gROOT
 gROOT.SetBatch(True)
 from ROOT import TFile, TGaxis, TCanvas, TF1, TGraph, TH1F, TSpline3, TLegend, TLatex, TLine # pylint: disable=import-error,no-name-in-module
-from ROOT import kAzure, kGreen, kOrange, kRed, kBlack, kGray, kFullCircle, kOpenCircle, kFullDiamond, gStyle, kRainBow # pylint: disable=import-error,no-name-in-module
+from ROOT import kAzure, kGreen, kOrange, kRed, kBlack, kGray, kFullCircle, kOpenCircle, kFullDiamond, gStyle, kRainBow, gROOT # pylint: disable=import-error,no-name-in-module
 
 gStyle.SetPadBottomMargin(0.12)
 gStyle.SetPadTopMargin(0.05)
@@ -31,7 +31,10 @@ parser = argparse.ArgumentParser(description='Arguments')
 parser.add_argument('cfgFileName', metavar='text', default='config.yml')
 parser.add_argument('--yMax', type=float, default=8.)
 parser.add_argument('--xMax', type=float, default=0.5)
+parser.add_argument('-b', action='store_true', default=False)
 args = parser.parse_args()
+
+gROOT.SetBatch(args.b)
 
 with open(args.cfgFileName, 'r') as ymlcfgFileName:
     cfg = yaml.load(ymlcfgFileName, yaml.FullLoader)
