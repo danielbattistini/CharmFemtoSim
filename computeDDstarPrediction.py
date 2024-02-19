@@ -11,44 +11,6 @@ import yaml
 from ROOT import TFile, TGaxis, TCanvas, TF1, TGraph, TH1F, TSpline3, TLegend, TLatex, TLine # pylint: disable=import-error,no-name-in-module
 from ROOT import kAzure, kGreen, kOrange, kRed, kBlack, kGray, kFullCircle, kOpenCircle, kFullDiamond, gStyle, kRainBow, gROOT # pylint: disable=import-error,no-name-in-module
 
-
-def WeightedAverage(graph, weights):
-    '''
-    Compute the weighted average of a graph with an histogram (TH1)
-    '''
-    smeared = 0
-    counts = weights.Integral(1, weights.GetNbinsX())
-    for iBin in range(weights.GetNbinsX()):
-        freq = weights.GetBinContent(iBin + 1) / counts
-        y = graph.Eval(weights.GetBinCenter(iBin+1))
-        smeared += freq * y
-    return smeared
-
-
-def SmearGraph(graph, matrix):
-    '''
-    Smear a graph with a smearing matrix that has:
-     x axis: true variable
-     y axis: reconstructed variable.
-    '''
-    gSmeared = TGraph(1)
-
-    iPoint = 0
-    for iBin in range(matrix.GetNbinsX()):
-        hProj = matrix.ProjectionY(f'hProj_{iBin+1}', iBin+1, iBin+1)
-        counts = hProj.Integral(1, hProj.GetNbinsX())
-
-        if counts < 1:
-            continue
-
-        x = matrix.GetXaxis().GetBinCenter(iBin+1)
-        ySmear = WeightedAverage(graph, hProj)
-        gSmeared.SetPoint(iPoint, x, ySmear)
-        iPoint += 1
-
-    return gSmeared
-
-
 gStyle.SetPadBottomMargin(0.12)
 gStyle.SetPadTopMargin(0.05)
 gStyle.SetPadLeftMargin(0.12)
@@ -117,7 +79,7 @@ nEvents = cfg['eventsperfile'] * len(inFileNames)
 
 print(f'\nAnalysing simulation outputs with {len(inFileNames)} files for a total of {nEvents} events\n')
 
-hSEDistrVsPt, hMEDistrVsPt, hSEDistrVsY, hResoSE = None, None, None, None
+hSEDistrVsPt, hMEDistrVsPt, hSEDistrVsY = None, None, None
 for inFileName in inFileNames:
     inFile = TFile.Open(os.path.join(inDirName, inFileName))
     hTmpSE = inFile.Get(f'hPairSE_{Dstarspecie}_{Dspecie}')
@@ -136,20 +98,7 @@ for inFileName in inFileNames:
         hMEDistrVsPt = hTmpME
         if doAccStudy:
             hSEDistrVsY = hTmpVsY
-    if cfg['predictions'].get('smear') and cfg['predictions']['smear']['enable']:
-        hTmpResoSE = inFile.Get(f'hResoSE_{Dstarspecie}_{Dspecie}')
-        hTmpResoSE.RebinX(cfg['predictions']['smear']['rebin'])
-        hTmpResoSE.RebinY(cfg['predictions']['smear']['rebin'])
-        hTmpResoSE.SetDirectory(0)
-        if hResoSE:
-            hResoSE.Add(hTmpResoSE)
-        else:
-            hResoSE = hTmpResoSE
     inFile.Close()
-
-cSmearingMatrix = TCanvas('cSmearingMatrix', '', 600, 600)
-hResoSE.Draw('colz')
-cSmearingMatrix.SaveAs(cfg['output']['file'][:-4] + '_smearingMatrix.pdf')
 
 BRfactor = brD * brDstar
 lumiScaleFactorPP = 6.e14 / nEvents
@@ -339,11 +288,6 @@ gPtEffPi.GetYaxis().SetTitle('#pi efficiency (%)')
 cEff.Modified()
 cEff.Update()
 
-predictions = {'1fm': pd.read_csv(cfg['predictions']['1fm'], names=['kstar', 'cf', 'idk'], sep=' '),
-               '2fm': pd.read_csv(cfg['predictions']['2fm'], names=['kstar', 'cf', 'idk'], sep=' '),
-               '3fm': pd.read_csv(cfg['predictions']['3fm'], names=['kstar', 'cf', 'idk'], sep=' '),
-               '5fm': pd.read_csv(cfg['predictions']['5fm'], names=['kstar', 'cf', 'idk'], sep=' ')}
-
 predColors = {'1fm': kAzure+4,
               '2fm': kGreen+2,
               '3fm': kOrange+7,
@@ -351,22 +295,30 @@ predColors = {'1fm': kAzure+4,
 
 gPred, sPred, hSEPred, hSEPredWithJets, hSEPredBkgD, hSEPredBkgDstar, \
     hSEPredBkgDDstar, hSEPredBkg, hCFPred = ({} for _ in range(9))
-for pred in predictions:
-    gPred[pred] = TGraph(1)
+predictions = {}
+for pred in ['1fm', '2fm', '3fm', '5fm']:
     hSEPred[pred] = hSEDistr.Clone(f'hSEPred{pred}')
+    hSEPred[pred].SetDirectory(0)
     hSEPred[pred].SetLineColor(predColors[pred])
     hSEPred[pred].SetMarkerColor(predColors[pred])
-    for iP, (kStar, cf) in enumerate(
-        zip(predictions[pred]['kstar'].to_numpy(), predictions[pred]['cf'].to_numpy())):
-        gPred[pred].SetPoint(iP, kStar/1000, cf)
-    if hResoSE:
-        gPred[pred] = SmearGraph(gPred[pred], hResoSE)
+    if '.dat' in cfg['predictions'][pred]:
+        predictions[pred] = pd.read_csv(cfg['predictions'][pred], names=['kstar', 'cf', 'idk'], sep=' ')
+        gPred[pred] = TGraph(1)
+        for iP, (kStar, cf) in enumerate(
+            zip(predictions[pred]['kstar'].to_numpy(), predictions[pred]['cf'].to_numpy())):
+            gPred[pred].SetPoint(iP, kStar/1000, cf)
+    elif '.root' in cfg['predictions'][pred]:
+        inFile = TFile(cfg['predictions'][pred])
+        gPred[pred] = inFile.Get('gCorrelationFunction')
+
+
     gPred[pred].SetLineColor(predColors[pred])
     gPred[pred].SetFillColor(predColors[pred])
     gPred[pred].SetLineWidth(2)
     sPred[pred] = TSpline3(f'sPred{pred}', gPred[pred])
     for iBin in range(1, hSEDistr.GetNbinsX()+1):
         kStarCent = hSEDistr.GetXaxis().GetBinCenter(iBin)
+        print(hSEPred[pred])
         hSEPred[pred].SetBinContent(
             iBin, hMEDistr.GetBinContent(iBin) * sPred[pred].Eval(kStarCent))
         hSEPred[pred].SetBinError(
@@ -397,6 +349,7 @@ for pred in predictions:
             hSEPredBkg[pred].SetBinContent(1)
 
     hCFPred[pred] = hSEPred[pred].Clone(f'hCFPred{pred}')
+    hCFPred[pred].SetDirectory(0)
     hCFPred[pred].Divide(hMEDistr)
 
     for iBin in range(1, hCFPred[pred].GetNbinsX()+1):
@@ -480,16 +433,24 @@ hFrame = cResult.DrawFrame(0., 0.01, args.xMax, args.yMax,
                            f';#it{{k}}* (GeV/#it{{c}});#it{{C}}_{{{Dtitle}{Dstartitle}}}')
 hFrame.GetYaxis().SetDecimals()
 hFrame.GetXaxis().SetNdivisions(505)
-for pred in predictions:
-    gPred[pred].Draw('L')
+for pred in cfg['predictions']:
+    print(pred)
+    gPred[pred].Draw('L same')
     if pred in ['1fm', '5fm']:
         hCFPred[pred].Draw('esame')
 lat.DrawLatex(0.18, 0.88, 'ALICE 3 upgrade projection')
-lat.DrawLatex(0.18, 0.83, '|#it{y}| < 4')
+if '5kG' in cfg['predictions']['1fm']:
+    B = 0.5
+elif '10kG' in cfg['predictions']['1fm']:
+    B= 1
+elif '20kG' in cfg['predictions']['1fm']:
+    B= 2
+
+lat.DrawLatex(0.18, 0.83, f'|#it{{y}}| < 4   B = {B} T')
 lat.DrawLatex(0.4, 0.5, '#it{L}_{int}:')
 lat.DrawLatex(0.4, 0.45, '   - pp = 18 fb^{#minus1}')
 lat.DrawLatex(0.4, 0.4, '   - 0#minus10% Pb#minusPb = 35 nb^{#minus1}')
-legModels.Draw()
+legModels.Draw('same')
 cResult.Modified()
 cResult.Update()
 
