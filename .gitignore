@@ -30,3 +30,12 @@
 *.exe
 *.out
 *.app
+
+# output
+*.png
+*.pdf
+*.eps
+AnalysisResults*.root
+
+# ROOT
+*ACLiC*
