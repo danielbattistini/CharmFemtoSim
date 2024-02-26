@@ -105,8 +105,8 @@ BRfactor = brD * brDstar
 lumiScaleFactorPP = 6.e14 / nEvents
 lumiScaleFactorPbPb = 12.5e9 * (1799.9**2 + 1405.9**2) / nEvents
 
-hSEDistr = hSEDistrVsPt.ProjectionZ()
-hMEDistr = hMEDistrVsPt.ProjectionZ()
+hSEDistr = hSEDistrVsPt.ProjectionZ('hSEDistr')
+hMEDistr = hMEDistrVsPt.ProjectionZ('hMEDistr')
 hSEDistr.GetXaxis().SetTitle('#it{k}* (GeV/#it{c})')
 hSEDistr.GetXaxis().SetTitleSize(0.045)
 hSEDistr.GetXaxis().SetLabelSize(0.045)
@@ -553,5 +553,14 @@ if doAccStudy:
     cKstar.Modified()
     cKstar.Update()
     cKstar.SaveAs('kStar_distr_diffExperiments'+cfg['output']['file'].replace('ALICE3', ''))
+
+# Write output to root file
+oFileName = os.path.splitext(cfg['output']['file'])[0] + '.root'
+oFile = TFile(oFileName, 'recreate')
+cResult.Write()
+hSEDistr.Write()
+hMEDistr.Write()
+oFile.Close()
+print(f'Output saved in: {oFileName}')
 
 input('Press enter to exit')
