@@ -29,7 +29,7 @@ parser = argparse.ArgumentParser(description='Arguments')
 parser.add_argument('cfgFileName', metavar='text', default='config.yml')
 parser.add_argument('--yMax', type=float, default=8.)
 parser.add_argument('--xMax', type=float, default=0.5)
-parser.add_argument('--only-signal', action='store_true', default=False)
+parser.add_argument('--pure-pp', action='store_true', default=False)
 parser.add_argument('-b', action='store_true', default=False)
 args = parser.parse_args()
 
@@ -128,10 +128,12 @@ ptMinsD = cfg['Dmesonperf']['ptmins']
 ptMaxsD = cfg['Dmesonperf']['ptmaxs']
 ptLimits = ptMinsD.copy()
 ptLimits.append(ptMaxsD[-1])
+sources = ['1fm', '2fm', '3fm', '5fm']
 
+hSignalOverBkg = {}
 if cfg['Dmesonperf']['inputfile'] == 'Analysis_output_LHC21dn_TOFPID.root':
     fGaus = TF1('fGaus', 'gaus', 1.8, 2.)
-    hSignalOverBkg = TH1F('hSignalOverBkg', '', len(ptMaxsD), np.array(ptLimits, 'd'))
+    hSignalOverBkg['1fm'] = TH1F('hSignalOverBkg_1fm', '', len(ptMaxsD), np.array(ptLimits, 'd'))
     for iPtD, (ptMinD, ptMaxD) in enumerate(zip(ptMinsD, ptMaxsD)):
         hSignal = inFileDmes.Get(f'invmass_signal_rap0_pt{iPtD}')
         hBkg = inFileDmes.Get(f'invmass_background_rap0_pt{iPtD}')
@@ -142,7 +144,7 @@ if cfg['Dmesonperf']['inputfile'] == 'Analysis_output_LHC21dn_TOFPID.root':
         maxMassBin = hSignal.GetXaxis().FindBin(mean+3*sigma)
         signal = hSignal.Integral(minMassBin, maxMassBin)
         bkg = hBkg.Integral(minMassBin, maxMassBin)
-        hSignalOverBkg.SetBinContent(iPtD+1, signal/bkg)
+        hSignalOverBkg['1fm'].SetBinContent(iPtD+1, signal/bkg)
 
         if iPtD == 0:
             hTot = inFileDmes.Get(f'invmass_signalbackground_rap0_pt{iPtD}')
@@ -153,6 +155,9 @@ if cfg['Dmesonperf']['inputfile'] == 'Analysis_output_LHC21dn_TOFPID.root':
             hTot.Draw('same')
             cMass.Modified()
             cMass.Update()
+        for source in sources[1:]:
+            hSignalOverBkg[source] = hSignalOverBkg['1fm'].Clone(f'hSignalOverBkg_{source}')
+            hSignalOverBkg[source].SetDirectory(0)
 else:
     if '5kG' in cfg['predictions']['1fm']:
         B=0.5
@@ -188,38 +193,52 @@ else:
         hSignal.Add(hSignalTmp)
         hBkg.Add(hBkgTmp)
 
-    hSignalOverBkg = hSignal.Clone('hSignalOverBkg')
-    hSignalOverBkg.Divide(hBkg)
-    hSignalOverBkg.SetDirectory(0)
+    hSignalOverBkg['1fm'] = hSignal.Clone('hSignalOverBkg_1fm')
+    hSignalOverBkg['1fm'].Divide(hBkg)
+    hSignalOverBkg['1fm'].SetDirectory(0)
+    for source in sources[1:]:
+        hSignalOverBkg[source] = hSignalOverBkg['1fm'].Clone(f'hSignalOverBkg_{source}')
+        hSignalOverBkg[source].SetDirectory(0)
+    
     inFilePerfD.Close()
 
-if args.only_signal:
-    for iBin in range(hSignalOverBkg.GetNbinsX()):
-        hSignalOverBkg.SetBinContent(iBin + 1, 1000)
+if args.pure_pp:
+    for iBin in range(hSignalOverBkg['1fm'].GetNbinsX()):
+        hSignalOverBkg['1fm'].SetBinContent(iBin + 1, 1000)
 
-for iBin in range(hSignalOverBkg.GetNbinsX()):
-    print(hSignalOverBkg.GetBinContent(iBin + 1))
+hSignalOverBkgDVsKstar = {
+    '1fm': hSEDistr.Clone('hSignalOverBkgDVsKstar_1fm'),
+    '2fm': hSEDistr.Clone('hSignalOverBkgDVsKstar_2fm'),
+    '3fm': hSEDistr.Clone('hSignalOverBkgDVsKstar_3fm'),
+    '5fm': hSEDistr.Clone('hSignalOverBkgDVsKstar_5fm'),
+}
+hSignalOverBkgDstarVsKstar = {
+    '1fm': hSEDistr.Clone('hSignalOverBkgDstarVsKstar_1fm'),
+    '2fm': hSEDistr.Clone('hSignalOverBkgDstarVsKstar_2fm'),
+    '3fm': hSEDistr.Clone('hSignalOverBkgDstarVsKstar_3fm'),
+    '5fm': hSEDistr.Clone('hSignalOverBkgDstarVsKstar_5fm'),
+}
 
-hSignalOverBkgDVsKstar = hSEDistr.Clone('hSignalOverBkgDVsKstar')
-hSignalOverBkgDstarVsKstar = hSEDistr.Clone('hSignalOverBkgDstarVsKstar')
 nKstarBins = hPtDvsKstar.GetXaxis().GetNbins()
 nPtBins = hPtDvsKstar.GetYaxis().GetNbins()
-for iKstarBin in range(1, nKstarBins+1):
-    SoverBKstarBin = 0
-    for iPtBin in range(1, nPtBins+1):
-        ptCent = hPtDvsKstar.GetYaxis().GetBinCenter(iPtBin)
-        ptBinSoB = hSignalOverBkg.GetXaxis().FindBin(ptCent)
-        SoverBKstarBin += hSignalOverBkg.GetBinContent(ptBinSoB)
-    SoverBKstarBin /= nPtBins
-    hSignalOverBkgDVsKstar.SetBinContent(iKstarBin, SoverBKstarBin)
-for iKstarBin in range(1, nKstarBins+1):
-    SoverBKstarBin = 0
-    for iPtBin in range(1, nPtBins+1):
-        ptCent = hPtDstarvsKstar.GetYaxis().GetBinCenter(iPtBin)
-        ptBinSoB = hSignalOverBkg.GetXaxis().FindBin(ptCent)
-        SoverBKstarBin += hSignalOverBkg.GetBinContent(ptBinSoB)
-    SoverBKstarBin /= nPtBins
-    hSignalOverBkgDstarVsKstar.SetBinContent(iKstarBin, SoverBKstarBin)
+
+for source in sources:
+    for iKstarBin in range(1, nKstarBins+1):
+        SoverBKstarBin = 0
+        for iPtBin in range(1, nPtBins+1):
+            ptCent = hPtDvsKstar.GetYaxis().GetBinCenter(iPtBin)
+            ptBinSoB = hSignalOverBkg[source].GetXaxis().FindBin(ptCent)
+            SoverBKstarBin += hSignalOverBkg[source].GetBinContent(ptBinSoB)
+        SoverBKstarBin /= nPtBins
+        hSignalOverBkgDVsKstar[source].SetBinContent(iKstarBin, SoverBKstarBin)
+    for iKstarBin in range(1, nKstarBins+1):
+        SoverBKstarBin = 0
+        for iPtBin in range(1, nPtBins+1):
+            ptCent = hPtDstarvsKstar.GetYaxis().GetBinCenter(iPtBin)
+            ptBinSoB = hSignalOverBkg[source].GetXaxis().FindBin(ptCent)
+            SoverBKstarBin += hSignalOverBkg[source].GetBinContent(ptBinSoB)
+        SoverBKstarBin /= nPtBins
+        hSignalOverBkgDstarVsKstar[source].SetBinContent(iKstarBin, SoverBKstarBin)
 
 cPtVsKstar = TCanvas('cPtVsKstar', '', 1200, 600)
 cPtVsKstar.Divide(2, 1)
@@ -250,10 +269,11 @@ hSEDistr.SetMarkerColor(kBlack)
 hMEDistr.SetMarkerColor(kBlack)
 hSEDistr.SetMarkerStyle(kFullCircle)
 hMEDistr.SetMarkerStyle(kFullCircle)
-hSignalOverBkgDVsKstar.Rebin(5)
-hSignalOverBkgDstarVsKstar.Rebin(5)
-hSignalOverBkgDVsKstar.Scale(1./5)
-hSignalOverBkgDstarVsKstar.Scale(1./5)
+for source in sources:
+    hSignalOverBkgDVsKstar[source].Rebin(5)
+    hSignalOverBkgDstarVsKstar[source].Rebin(5)
+    hSignalOverBkgDVsKstar[source].Scale(1./5)
+    hSignalOverBkgDstarVsKstar[source].Scale(1./5)
 
 hCFPythia = hSEDistr.Clone('hCFPythia')
 hCFPythia.GetYaxis().SetDecimals()
@@ -385,8 +405,8 @@ for pred in ['1fm', '2fm', '3fm', '5fm']:
     for iKstarBin in range(1, hSEPred[pred].GetNbinsX()+1):
         signalSq = hSEPred[pred].GetBinContent(iKstarBin)
         signal = np.sqrt(signalSq)
-        bkgD = 1. / hSignalOverBkgDVsKstar.GetBinContent(iKstarBin) * signal
-        bkgDstar = 1. / hSignalOverBkgDstarVsKstar.GetBinContent(iKstarBin) * signal * 10
+        bkgD = 1. / hSignalOverBkgDVsKstar[pred].GetBinContent(iKstarBin) * signal
+        bkgDstar = 1. / hSignalOverBkgDstarVsKstar[pred].GetBinContent(iKstarBin) * signal * 10
         if hSEPred[pred].GetBinContent(iBin) != np.nan:
             hSEPredBkgD[pred].SetBinContent(iKstarBin, signal * bkgD)
             hSEPredBkgDstar[pred].SetBinContent(iKstarBin, signal * bkgDstar)
