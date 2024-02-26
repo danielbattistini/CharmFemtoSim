@@ -580,6 +580,12 @@ oFile = TFile(oFileName, 'recreate')
 cResult.Write()
 hSEDistr.Write()
 hMEDistr.Write()
+
+for source in sources:
+    # reset the axis limits to make the histogram drawable
+    hSEPred[source].GetYaxis().SetRangeUser(0.5, 1.1 * hSEPred[source].GetMaximum())
+    hSEPred[source].Write()
+
 oFile.Close()
 print(f'Output saved in: {oFileName}')
 
