@@ -127,29 +127,73 @@ ptMinsD = cfg['Dmesonperf']['ptmins']
 ptMaxsD = cfg['Dmesonperf']['ptmaxs']
 ptLimits = ptMinsD.copy()
 ptLimits.append(ptMaxsD[-1])
-hSignalOverBkg = TH1F('hSignalOverBkg', '', len(ptMaxsD), np.array(ptLimits, 'd'))
-fGaus = TF1('fGaus', 'gaus', 1.8, 2.)
-for iPtD, (ptMinD, ptMaxD) in enumerate(zip(ptMinsD, ptMaxsD)):
-    hSignal = inFileDmes.Get(f'invmass_signal_rap0_pt{iPtD}')
-    hBkg = inFileDmes.Get(f'invmass_background_rap0_pt{iPtD}')
-    hSignal.Fit('fGaus', 'Q0')
-    mean = fGaus.GetParameter(1)
-    sigma = fGaus.GetParameter(2)
-    minMassBin = hSignal.GetXaxis().FindBin(mean-3*sigma)
-    maxMassBin = hSignal.GetXaxis().FindBin(mean+3*sigma)
-    signal = hSignal.Integral(minMassBin, maxMassBin)
-    bkg = hBkg.Integral(minMassBin, maxMassBin)
-    hSignalOverBkg.SetBinContent(iPtD+1, signal/bkg)
 
-    if iPtD == 0:
-        hTot = inFileDmes.Get(f'invmass_signalbackground_rap0_pt{iPtD}')
-        hTot.SetLineColor(kBlack)
-        hTot.SetLineWidth(2)
-        cMass = TCanvas('cMass', '', 800, 800)
-        cMass.DrawFrame(1.72, 0., 2.05, 4000, ';#it{M}_{K#pi} (GeV/#it{c}) ;entries')
-        hTot.Draw('same')
-        cMass.Modified()
-        cMass.Update()
+if cfg['Dmesonperf']['inputfile'] == 'Analysis_output_LHC21dn_TOFPID.root':
+    fGaus = TF1('fGaus', 'gaus', 1.8, 2.)
+    hSignalOverBkg = TH1F('hSignalOverBkg', '', len(ptMaxsD), np.array(ptLimits, 'd'))
+    for iPtD, (ptMinD, ptMaxD) in enumerate(zip(ptMinsD, ptMaxsD)):
+        hSignal = inFileDmes.Get(f'invmass_signal_rap0_pt{iPtD}')
+        hBkg = inFileDmes.Get(f'invmass_background_rap0_pt{iPtD}')
+        hSignal.Fit('fGaus', 'Q0')
+        mean = fGaus.GetParameter(1)
+        sigma = fGaus.GetParameter(2)
+        minMassBin = hSignal.GetXaxis().FindBin(mean-3*sigma)
+        maxMassBin = hSignal.GetXaxis().FindBin(mean+3*sigma)
+        signal = hSignal.Integral(minMassBin, maxMassBin)
+        bkg = hBkg.Integral(minMassBin, maxMassBin)
+        hSignalOverBkg.SetBinContent(iPtD+1, signal/bkg)
+
+        if iPtD == 0:
+            hTot = inFileDmes.Get(f'invmass_signalbackground_rap0_pt{iPtD}')
+            hTot.SetLineColor(kBlack)
+            hTot.SetLineWidth(2)
+            cMass = TCanvas('cMass', '', 800, 800)
+            cMass.DrawFrame(1.72, 0., 2.05, 4000, ';#it{M}_{K#pi} (GeV/#it{c}) ;entries')
+            hTot.Draw('same')
+            cMass.Modified()
+            cMass.Update()
+else:
+    if '5kG' in cfg['predictions']['1fm']:
+        B=0.5
+    elif '10kG' in cfg['predictions']['1fm']:
+        B=1
+    elif '20kG' in cfg['predictions']['1fm']:
+        B=2
+    else:
+        B=2
+    inFilePerfD = TFile(cfg['Dmesonperf']['inputfile'])
+
+    hSignal = TH1F('hSignal', '', len(ptMaxsD), np.array(ptLimits, 'd'))
+    hBkg = TH1F('hBkg', '', len(ptMaxsD), np.array(ptLimits, 'd'))
+    for iRapidity in range(1):
+        hSOB = inFilePerfD.Get(f'Toy_sbyb_{B}T_solenoid_rap{iRapidity}_')
+        hSignificance = inFilePerfD.Get(f'Toy_significance_{B}T_solenoid_rap{iRapidity}_')
+        hSignalTmp = hSignal.Clone('hSignalTmp')
+        hSignalTmp.Reset()
+        hBkgTmp = hSignal.Clone('hBkgTmp')
+        hBkgTmp.Reset()
+
+        hadronicCrossSec = 71.3e-3 # um = barn. Hadronic cross section taken from JHEP 07 (2018) 161
+        lumi = 18e15 # um = barn-1
+        for iBin in range(hSignal.GetNbinsX()):
+            nExpectedEvents = hadronicCrossSec * lumi
+            sob = hSOB.GetBinContent(iBin + 1)
+            signif = hSignificance.GetBinContent(iBin + 1) * np.sqrt(nExpectedEvents)
+            signal = signif ** 2 * (sob + 1) / sob
+            background = signal / sob
+            hSignalTmp.SetBinContent(iBin + 1, signal)
+            hBkgTmp.SetBinContent(iBin + 1, background)
+
+        hSignal.Add(hSignalTmp)
+        hBkg.Add(hBkgTmp)
+
+    hSignalOverBkg = hSignal.Clone('hSignalOverBkg')
+    hSignalOverBkg.Divide(hBkg)
+    hSignalOverBkg.SetDirectory(0)
+    inFilePerfD.Close()
+
+for iBin in range(hSignalOverBkg.GetNbinsX()):
+    print(hSignalOverBkg.GetBinContent(iBin + 1))
 
 hSignalOverBkgDVsKstar = hSEDistr.Clone('hSignalOverBkgDVsKstar')
 hSignalOverBkgDstarVsKstar = hSEDistr.Clone('hSignalOverBkgDstarVsKstar')
@@ -318,7 +362,6 @@ for pred in ['1fm', '2fm', '3fm', '5fm']:
     sPred[pred] = TSpline3(f'sPred{pred}', gPred[pred])
     for iBin in range(1, hSEDistr.GetNbinsX()+1):
         kStarCent = hSEDistr.GetXaxis().GetBinCenter(iBin)
-        print(hSEPred[pred])
         hSEPred[pred].SetBinContent(
             iBin, hMEDistr.GetBinContent(iBin) * sPred[pred].Eval(kStarCent))
         hSEPred[pred].SetBinError(
