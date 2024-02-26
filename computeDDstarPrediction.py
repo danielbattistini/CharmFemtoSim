@@ -29,6 +29,7 @@ parser = argparse.ArgumentParser(description='Arguments')
 parser.add_argument('cfgFileName', metavar='text', default='config.yml')
 parser.add_argument('--yMax', type=float, default=8.)
 parser.add_argument('--xMax', type=float, default=0.5)
+parser.add_argument('--only-signal', action='store_true', default=False)
 parser.add_argument('-b', action='store_true', default=False)
 args = parser.parse_args()
 
@@ -191,6 +192,10 @@ else:
     hSignalOverBkg.Divide(hBkg)
     hSignalOverBkg.SetDirectory(0)
     inFilePerfD.Close()
+
+if args.only_signal:
+    for iBin in range(hSignalOverBkg.GetNbinsX()):
+        hSignalOverBkg.SetBinContent(iBin + 1, 1000)
 
 for iBin in range(hSignalOverBkg.GetNbinsX()):
     print(hSignalOverBkg.GetBinContent(iBin + 1))
