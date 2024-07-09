@@ -171,7 +171,7 @@ else:
 
     hSignal = TH1F('hSignal', '', len(ptMaxsD), np.array(ptLimits, 'd'))
     hBkg = TH1F('hBkg', '', len(ptMaxsD), np.array(ptLimits, 'd'))
-    for iRapidity in range(1):
+    for iRapidity in range(4):
         hSOB = inFilePerfD.Get(f'Toy_sbyb_{B}T_solenoid_rap{iRapidity}_')
         hSignificance = inFilePerfD.Get(f'Toy_significance_{B}T_solenoid_rap{iRapidity}_')
         hSignalTmp = hSignal.Clone('hSignalTmp')
